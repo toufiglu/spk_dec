@@ -1,0 +1,26 @@
+name: audio
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - numpy=2.2
+  - pandas
+  - pyarrow
+  - scipy
+  - joblib
+  - h5py
+  - pillow
+  - tqdm
+  - pip
+  - pip:
+      # Deep learning (pip wheels; bundles its own libomp -> no OMP conflicts)
+      - torch==2.9.0
+      - torchaudio==2.9.0
+      # HF + audio stack
+      - transformers>=4.45
+      - safetensors
+      - librosa
+      - praatio
+      - accelerate
+      # sklearn via pip (avoid conda llvm-openmp)
+      - scikit-learn

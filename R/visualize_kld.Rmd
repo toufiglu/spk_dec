@@ -1,0 +1,192 @@
+---
+title: "visualize_kld"
+author: "Yiming Lu"
+date: "2025-10-23"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+rm(list=ls())
+knitr::opts_chunk$set(echo = TRUE)
+library("ggplot2")
+library("tidyverse")
+library("lmerTest")
+source("helpers.R")
+```
+
+```{r load-csv}
+layers <- 1:12
+spec_idx_path <- "../spec_idx"
+
+layer_results <- lapply(layers, function(i) {
+  path <- sprintf("%s/layer_%d_spec_idx.csv", spec_idx_path, i)
+  read_csv(path, show_col_types = FALSE) %>% 
+  sort_hidden_act(i=i)
+})
+
+num_speaker <- length(unique(layer_results[[1]]$speaker))
+```
+
+```{r by-vowel plot}
+lapply(seq_along(layer_results), function(i) {
+  df <- layer_results[[i]]
+  mean_vowel_results <- get_summary_vowels(df)
+  by_vowel <- by_vowel_plot(results=df, mean_vowel_results=mean_vowel_results)
+  plot_name <- sprintf("redo_spec_idx_by_vowels_plots/by_vowel_layer_%d.png", i)
+  
+  ggsave(filename = plot_name, plot = by_vowel, width = 6, height = 4, dpi = 300)
+})
+```
+
+```{r by-speaker plot}
+lapply(seq_along(layer_results), function(i) {
+  df <- layer_results[[i]]
+  mean_speaker_results <- get_summary_speakers(df)
+  by_speaker <- by_speaker_plot(results=df, mean_speaker_results=mean_speaker_results)
+  plot_name <- sprintf("redo_spec_idx_by_speakers_plots/by_speaker_layer_%d.png", i)
+  
+  ggsave(filename = plot_name, plot = by_speaker, width = 6, height = 4, dpi = 300)
+})
+```
+
+```{r by-vowel-over-time}
+merged_results <- bind_rows(layer_results)
+
+all_vowels_trajectory <- merged_results %>%
+  filter(!vowel %in% c("AW", "AY", "EY", "OW", "OY")) %>% 
+  ggplot(aes(x=layer, y=kld, color = vowel, group = vowel)) +
+  xlab("Layers") +
+  ylab("Kullback–Leibler divergence") +
+  geom_point(alpha=0.2) +
+  geom_hline(yintercept = 0.5, linetype="dashed", size=2, color="red") +
+  stat_summary(fun = mean, geom = "line", size = 1) +   # line per vowel (mean across speakers)
+  stat_summary(fun = mean, geom = "point", size = 2) +
+  scale_x_continuous(breaks = seq(1, 12, 1)) +
+  scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, 0.1)) + 
+  facet_wrap(~vowel, ncol = 3) +     # 👈 this makes one subplot per vowel
+  theme(
+    legend.position = "none", 
+    axis.text.x = element_text(hjust=1, size = 10),
+    axis.text.y = element_text(size = 10),
+    axis.title.x = element_text(size = 20, face = "bold"),
+    axis.title.y = element_text(size = 20, face = "bold"),
+    legend.text = element_text (size = 10),
+    legend.title = element_text(size = 10, face = "bold"),
+    panel.background = element_rect(fill = "white"),
+    panel.grid.major = element_line(color = "grey", size = 0.5),
+    panel.grid.minor = element_blank())
+  
+
+
+all_talkers_trajectory <- merged_results %>%
+  filter(!vowel %in% c("AW", "AY", "EY", "OW", "OY")) %>% 
+  mutate(speaker = factor(as.character(speaker))) %>% 
+  ggplot(aes(x=layer, y=kld, color = speaker, group = speaker)) +
+  xlab("Layers") +
+  ylab("Kullback–Leibler divergence") +
+  geom_point(alpha=0.2) +
+  geom_hline(yintercept = 0.5, linetype="dashed", size=2, color="red") +
+  stat_summary(fun = mean, geom = "line", size = 1) +   # line per speaker (mean across vowels)
+  stat_summary(fun = mean, geom = "point", size = 2) +
+  scale_x_continuous(breaks = seq(1, 12, 1)) +
+  scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, 0.1)) + 
+  theme(
+    legend.position = "right", 
+    axis.text.x = element_text(hjust=1, size = 10),
+    axis.text.y = element_text(size = 10),
+    axis.title.x = element_text(size = 20, face = "bold"),
+    axis.title.y = element_text(size = 20, face = "bold"),
+    legend.text = element_text (size = 10),
+    legend.title = element_text(size = 10, face = "bold"),
+    panel.background = element_rect(fill = "white"),
+    panel.grid.major = element_line(color = "grey", size = 0.5),
+    panel.grid.minor = element_blank())
+    
+```
+
+```{r lmer}
+data <- read_csv("../figures/distribution_plots/kl_ratio_summary.csv")
+m <- lm(r ~ vowel * layer + speaker, data=data)
+summary(m)
+```
+```{r visualize-RSA}
+marginals <- read_csv("../marginal_cors_across_layers.csv") %>% dplyr::select(-...1) %>% mutate(type="all-speakers")
+specs <- read_csv("../spec_cors_across_layers.csv") %>% dplyr::select(-...1) %>% mutate(type="speaker-specific")
+
+results <- rbind(marginals, specs)
+
+type_order  <- c("all-speakers","speaker-specific")
+results <- results |> 
+  mutate(
+    type  = factor(type,  levels = type_order),
+    layer = factor(layer)
+  )
+
+p <- ggplot(results, aes(x = type, y = corr, color = type)) +
+  geom_jitter(
+    alpha = 0.2, size = 1.6,
+    position = position_jitterdodge(jitter.width = 0.15, dodge.width = 0.6),
+    show.legend = FALSE
+  ) +
+  # mean ± 1 SEM pointrange (opaque)
+  stat_summary(
+    fun.data = mean_se,
+    geom = "pointrange",
+    linewidth = 1,
+    size = 0.4,
+    position = position_nudge(x = 0.15),  # shift right; use -0.15 to shift left
+    show.legend = FALSE
+  ) +
+  # colors & legend
+  scale_color_manual(
+    values = c("all-speakers" = "#f1223e", "speaker-specific" = "#00b4d8"),
+    guide = guide_legend(title = NULL)
+  ) +
+  facet_wrap(~ layer, ncol = 4, labeller = labeller(layer = function(x) paste0("Layer ", x))) +
+  labs(x = NULL, y = "Correlation") +
+  theme_minimal(base_size = 11) +
+  theme(
+    legend.position = "top",
+    panel.grid.minor = element_blank(),
+    panel.grid.major.y = element_line(color = "grey80", linewidth = 0.3),
+    strip.background = element_rect(fill = "black"),
+    strip.text.x = element_text(colour = "white", face = "bold")
+  )
+
+```
+
+```{r run-stats-RSA}
+# a linear model won't be right.
+m <- lmer(corr ~ type * layer + (1|speaker), data=results)
+summary(m)
+```
+
+```{r another-way-to-plot}
+p_layer <- ggplot(results, aes(x = layer, y = corr, color = type)) +
+  geom_jitter(
+    alpha = 0.2, size = 1.6,
+    position = position_jitterdodge(jitter.width = 0.15, dodge.width = 0.6),
+    show.legend = FALSE
+  ) +
+  # mean ± 1 SEM pointrange (opaque)
+  stat_summary(
+    fun.data = mean_se,
+    geom = "pointrange",
+    linewidth = 1,
+    size = 0.4,
+    position = position_dodge(width = 0.6)
+  ) +
+  # colors & legend
+  scale_color_manual(
+    values = c("all-speakers" = "#f1223e", "speaker-specific" = "#00b4d8"),
+    guide = guide_legend(title = NULL)
+  ) +
+  labs(x = NULL, y = "Correlation") +
+  theme_minimal(base_size = 11) +
+  theme(
+    legend.position = "top",
+    panel.grid.minor = element_blank(),
+    panel.grid.major.y = element_line(color = "grey80", linewidth = 0.3)
+  )
+```
+
