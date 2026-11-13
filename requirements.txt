@@ -1,0 +1,42 @@
+# Python dependencies for the talker-decoding pipeline (Python 3.12).
+#
+# This mirrors environment.yml for pip-only installs:
+#     python -m venv .venv && source .venv/bin/activate
+#     pip install -r requirements.txt
+#
+# Note: the exploratory gammatone scripts (src/exploratory/) additionally
+# require `eelbrain`, which is conda-only and intentionally NOT listed here.
+
+# Core numerics / IO
+numpy==2.2.*
+pandas
+pyarrow
+scipy
+joblib
+h5py
+pillow
+tqdm
+
+# Deep learning (pip wheels bundle their own libomp -> no OpenMP conflicts)
+torch==2.9.0
+torchaudio==2.9.0
+
+# Hugging Face + audio stack
+transformers>=4.45
+safetensors
+accelerate
+librosa
+soundfile
+praatio
+praat-parselmouth
+
+# Modeling
+scikit-learn
+rsatoolbox   # RSA stage (compute_rsa.py)
+
+# Plotting
+matplotlib
+seaborn
+
+# Misc (syllable splitting used in word-selection utilities)
+pyphen

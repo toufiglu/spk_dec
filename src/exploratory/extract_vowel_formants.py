@@ -1,5 +1,4 @@
-import importlib
-import helpers
+from acoustics import target_vowels
 import numpy as np
 import pandas as pd
 import os
@@ -10,10 +9,9 @@ import soundfile as sf
 import praatio.audio
 import re
 import parselmouth 
-importlib.reload(helpers)
         
 
-vowels = helpers.target_vowels
+vowels = target_vowels
 
 ROOT = "./mfa_align"
 path_audios = os.path.join(ROOT, "corpus_before_align")
@@ -63,34 +61,19 @@ for speaker in os.listdir(path_audios):
 
             filename = wav.split("/")[-1].split(".")[0]
 
-            for i, phone_tier in enumerate(phone_tiers):
+            for phone_tier in phone_tiers:
                 phone = re.sub(r"\d+", "", phone_tier[2])
-
-                if i==0:
-                    prev_phone = None
-                else:
-                    prev_phone_raw = phone_tiers[i-1][2] or ""
-                    prev_phone = re.sub(r"\d+", "", prev_phone_raw).strip()
-                    if prev_phone == "":
-                        prev_phone = None
-                
-                if prev_phone is None:
-                    continue
 
                 rep = vowel_counter.get(phone, 0) + 1
                 vowel_counter[phone] = rep
 
                 if phone in vowels:
-                    vowel_t_start = phone_tier[0]
-                    vowel_t_end = phone_tier[1]
-                    dur = (vowel_t_end - vowel_t_start)*1000
+                    t_start = phone_tier[0]
+                    t_end = phone_tier[1]
+                    dur = (t_end - t_start)*1000
 
                     if dur < 40:
                         continue
-                    
-                    t_start = phone_tiers[i-1][0]
-                    t_end = phone_tier[1]
-
                     idx_start = int(t_start * sr)
                     idx_end = int(t_end * sr)
                     
@@ -99,7 +82,6 @@ for speaker in os.listdir(path_audios):
                     row.append(
                         {
                             "phone": phone,
-                            "prev_phone": prev_phone,
                             "FILENAME": filename,
                             "rep": rep,
                             "start_time": t_start,
@@ -113,10 +95,9 @@ for speaker in os.listdir(path_audios):
                         }
                     )
             print(f"{filename} is done.")
-vowel_one_phone_info = pd.DataFrame(row)
-vowel_one_phone_info.to_pickle("./context_size/one_previous_phone/vowel_one_phone_info.pkl")
-
-vowel_one_phone_info = pd.read_pickle("./context_size/one_previous_phone/vowel_one_phone_info.pkl")
+vowel_info = pd.DataFrame(row)
+vowel_info.to_pickle("./context_size/single_vowels/vowel_info.pkl")
+vowel_info = pd.read_pickle("./context_size/single_vowels/vowel_info.pkl")
 
 def one_time_point_per_row(df):
     """
@@ -128,7 +109,6 @@ def one_time_point_per_row(df):
     for _, row in df.iterrows():
         speaker = row["speaker"]
         phone = row["phone"]
-        prev_phone = row["prev_phone"]
         filename = row['FILENAME']
         f1 = row['f1']
         f2 = row['f2']
@@ -146,12 +126,19 @@ def one_time_point_per_row(df):
                 'f2': f2[frame_idx],
                 'f3': f3[frame_idx],
                 'phone': phone,
-                'prev_phone': prev_phone,
                 'speaker': speaker
             })
 
     return pd.DataFrame(rows_long)
 
-vowel_one_phone_formant_df = one_time_point_per_row(vowel_one_phone_info)
-vowel_one_phone_formant_df.to_pickle("./context_size/one_previous_phone/vowel_one_phone_formant_df.pkl")
+vowel_formant_df = one_time_point_per_row(vowel_info)
+vowel_formant_df.to_pickle("./context_size/single_vowels/vowel_formant_df.pkl")
 
+
+# do some plotting
+
+plt.hist(vowel_info["dur"], bins=30)
+plt.xlabel("Duration (seconds)")
+plt.ylabel("Count")
+plt.title("Distribution of vowel durations")
+plt.savefig("./context_size/single_vowels/vowel_duration_overall.png", dpi=300, bbox_inches="tight")

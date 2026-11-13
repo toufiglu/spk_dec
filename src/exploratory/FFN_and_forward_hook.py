@@ -1,8 +1,10 @@
 
 
 import matplotlib.pyplot as plt
-import importlib
-import helpers
+from acoustics import get_formant_with_pca_cols
+from decoding import phone_find_best_C, phone_log_reg, split_audio_files_by_filename, split_audio_files_stratified, talker_find_best_C, talker_log_reg
+from spec_idx import calculate_speaker_marginal_kld, check_folder_files_exist, create_lda_from_hidden_acts, create_pca_components
+from viz_helpers import mean_line_and_points
 import os
 import torch
 import torch.nn as nn
@@ -19,7 +21,6 @@ from torch.utils.data import DataLoader,TensorDataset
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 
-importlib.reload(helpers)
 
 # load the last layer, but this is not ideal
 # hid_act_layer12 = pd.read_pickle("./wav_2_vec_hidden_lda/lda_acts_12.pkl")
@@ -29,7 +30,7 @@ hid_act_layer9 = pd.read_pickle("./wav_2_vec_hidden_lda/lda_acts_9.pkl")
 
 ## format the data: from Mike X Cohen
 # split the data, each recording should only occur in either training or testing
-train_df, test_df = helpers.split_audio_files_by_filename(data=hid_act_layer9, test_size=.1)
+train_df, test_df = split_audio_files_by_filename(data=hid_act_layer9, test_size=.1)
 # train_all = hid_act_layer12 # the version of experiment where I used all training data
 
 # do z-score normalization for hidden activations, format it into pytorch dataloader
@@ -321,11 +322,11 @@ def decode_talker_from_ffn_one_layer(df, layer, dont_run_again=True):
 
     df_copy.rename(columns={layer: 'act'}, inplace=True)
 
-    train_df, test_df = helpers.split_audio_files_stratified(data=df_copy, test_size=0.1, group_by="speaker") 
+    train_df, test_df = split_audio_files_stratified(data=df_copy, test_size=0.1, group_by="speaker") 
 
-    best_C, C_auc_scores = helpers.talker_find_best_C(data=test_df, source=f"ffn_{layer}", dont_run_again=dont_run_again)
+    best_C, C_auc_scores = talker_find_best_C(data=test_df, source=f"ffn_{layer}", dont_run_again=dont_run_again)
 
-    preds, auc = helpers.talker_log_reg(df_copy, best_C, source=f"ffn_{layer}", dont_run_again=dont_run_again)
+    preds, auc = talker_log_reg(df_copy, best_C, source=f"ffn_{layer}", dont_run_again=dont_run_again)
 
     return {
         "layer": layer,
@@ -347,11 +348,11 @@ def decode_phone_from_ffn_one_layer(df, layer, dont_run_again=True):
 
     df_copy.rename(columns={layer: 'act'}, inplace=True)
 
-    train_df, test_df = helpers.split_audio_files_by_filename(data=df_copy, test_size=0.1) 
+    train_df, test_df = split_audio_files_by_filename(data=df_copy, test_size=0.1) 
 
-    best_C, C_auc_scores = helpers.phone_find_best_C(data=test_df, source=f"ffn_{layer}", dont_run_again=dont_run_again)
+    best_C, C_auc_scores = phone_find_best_C(data=test_df, source=f"ffn_{layer}", dont_run_again=dont_run_again)
 
-    preds, auc = helpers.phone_log_reg(df_copy, best_C, source=f"ffn_{layer}", dont_run_again=dont_run_again)
+    preds, auc = phone_log_reg(df_copy, best_C, source=f"ffn_{layer}", dont_run_again=dont_run_again)
 
     return {
         "layer": layer,
@@ -398,7 +399,7 @@ def get_spec_idx_for_every_ffn_layer(ffn_act_df, path, formant_df, dont_run_agai
     spec_idx = {}
     p = Path(path) # we will save results to this directory.
     os.makedirs(p, exist_ok=True)
-    if dont_run_again and helpers.check_folder_files_exist(folder=p, layers=layers): # check if dir exists, all csv files were already computed.
+    if dont_run_again and check_folder_files_exist(folder=p, layers=layers): # check if dir exists, all csv files were already computed.
         for file in p.glob("layer_*_spec_idx.csv"):
             i = file.stem.split("_")[1]
             df = pd.read_csv(file)
@@ -416,9 +417,9 @@ def get_spec_idx_for_every_ffn_layer(ffn_act_df, path, formant_df, dont_run_agai
 
             df_copy = df_copy.drop(columns=cols_to_drop)
 
-            act = helpers.create_lda_from_hidden_acts(layer=layer, df=df_copy, hid_act_col=layer, lda_act_filename=f"./ffn_saved_models/ffn_with_lda_{layer}.pkl")
+            act = create_lda_from_hidden_acts(layer=layer, df=df_copy, hid_act_col=layer, lda_act_filename=f"./ffn_saved_models/ffn_with_lda_{layer}.pkl")
 
-            act = helpers.create_pca_components(df=act, lda_components=[f"{layer}_lda_1", f"{layer}_lda_2", f"{layer}_lda_3"])
+            act = create_pca_components(df=act, lda_components=[f"{layer}_lda_1", f"{layer}_lda_2", f"{layer}_lda_3"])
 
             # merge formant_df cols with the act
             formant_df_cols = formant_df[["time", "filename", "pca_f1", "pca_f2", "pca_f3"]] # but I need to make sure pca is done for the formant_df
@@ -439,7 +440,7 @@ def get_spec_idx_for_every_ffn_layer(ffn_act_df, path, formant_df, dont_run_agai
                                             )
                                             .round(2))
             # calculate kld
-            act_spec_idx = helpers.calculate_speaker_marginal_kld(df=act_vowel_mean_pooled)
+            act_spec_idx = calculate_speaker_marginal_kld(df=act_vowel_mean_pooled)
             act_spec_idx_df = pd.DataFrame(act_spec_idx)
             
             # name the output file
@@ -452,7 +453,7 @@ def get_spec_idx_for_every_ffn_layer(ffn_act_df, path, formant_df, dont_run_agai
         
     return spec_idx
 
-kl_ratio_ffn = get_spec_idx_for_every_ffn_layer(ffn_act_df=hid_act_layer9_with_ffn_act, formant_df=helpers.get_formant_with_pca_cols(), dont_run_again=False, path="./ffn_saved_models")
+kl_ratio_ffn = get_spec_idx_for_every_ffn_layer(ffn_act_df=hid_act_layer9_with_ffn_act, formant_df=get_formant_with_pca_cols(), dont_run_again=False, path="./ffn_saved_models")
 
 #######################################################################
 # visualization
@@ -481,7 +482,7 @@ g = sns.FacetGrid(all_results, col="vowel", col_wrap=3, sharex=True, sharey=True
 g.map_dataframe(sns.scatterplot, x="layer", y="r", alpha=0.2, s=12, color=None, ax=ax)
 
 # mean line + mean points (per-vowel facet)
-g.map_dataframe(helpers.mean_line_and_points, color=None)
+g.map_dataframe(mean_line_and_points, color=None)
 
 # hline, ticks, limits, grid
 for ax in g.axes.flatten():

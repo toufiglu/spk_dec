@@ -1,6 +1,5 @@
 # %% import 
-import importlib
-import helpers
+from activations import read_activation_and_left_join_with_acoustics
 import numpy as np
 import pandas as pd
 import os
@@ -15,7 +14,6 @@ import re
 import joblib
 
 from pathlib import Path
-importlib.reload(helpers)
 
 from sklearn.model_selection import StratifiedKFold, cross_val_score
 from sklearn.pipeline import Pipeline
@@ -339,7 +337,7 @@ time_df = pd.DataFrame(rows)
 time_df.to_pickle(dst_wav_folder / "word_time_df.pickle")
 # %% create time-annotated hidden act df
 time_df = pd.read_pickle(dst_wav_folder / "word_time_df.pickle")
-hid_act_layer1 = helpers.read_activation_and_left_join_with_acoustics(hid_act_folder="../adaptation_exps/single_word_embeddings/wav2vec2_base",
+hid_act_layer1 = read_activation_and_left_join_with_acoustics(hid_act_folder="../adaptation_exps/single_word_embeddings/wav2vec2_base",
                                                        hid_pkl_folder="../adaptation_exps/single_word_embeddings/wav2vec2_base_pkl",
                                                        num_layers=12,
                                                        which_layer=6,
@@ -434,7 +432,7 @@ def train_model_for_layer(
     model: str,
     training_data: str
 ):
-    hid_act = helpers.read_activation_and_left_join_with_acoustics(
+    hid_act = read_activation_and_left_join_with_acoustics(
         hid_act_folder=hid_act_folder,
         hid_pkl_folder=hid_pkl_folder,
         num_layers=num_layers,

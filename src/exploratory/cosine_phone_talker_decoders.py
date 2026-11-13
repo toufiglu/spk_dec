@@ -1,5 +1,4 @@
  
-import importlib
 import os
 import torch
 import pandas as pd
@@ -8,13 +7,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 import hoggorm as ho
 
-import helpers
+from acoustics import filter_out_irrelevant_rows
+from decoding import decode_phone_COEF_from_one_layer, decode_talker_COEF_from_one_layer, phone_find_best_C, phone_log_reg, split_audio_files_by_filename, split_audio_files_stratified, talker_find_best_C, talker_log_reg
 from transformers import Wav2Vec2Model
 from sklearn.preprocessing import LabelEncoder,StandardScaler
 from sklearn.metrics.pairwise import cosine_similarity
 from plotnine import *
 
-importlib.reload(helpers)
 
 def get_talker_coef_across_layers(
     num_layers,
@@ -35,7 +34,7 @@ def get_talker_coef_across_layers(
     talker_coef_across_layers = {}
 
     for layer in range(1, num_layers):
-        layer_coef = helpers.decode_talker_COEF_from_one_layer(
+        layer_coef = decode_talker_COEF_from_one_layer(
             layer=layer,
             hid_act_folder=hid_act_folder,
             hid_pkl_folder=hid_pkl_folder,
@@ -72,7 +71,7 @@ def get_phone_coef_across_layers(
     phone_coef_across_layers = {}
 
     for layer in range(1, num_layers):
-        layer_coef = helpers.decode_phone_COEF_from_one_layer(
+        layer_coef = decode_phone_COEF_from_one_layer(
             layer=layer,
             hid_act_folder=hid_act_folder,
             hid_pkl_folder=hid_pkl_folder,
@@ -217,28 +216,28 @@ phone_auc_across_layers = {}
 
 for layer in range(1, num_layers):
     act_layer = pd.read_pickle(f"./data/processed/wav_2_vec_hidden_pkl/hidden_acts_{layer}.pkl")
-    act_layer = helpers.filter_out_irrelevant_rows(act_layer)
+    act_layer = filter_out_irrelevant_rows(act_layer)
     mask = zero_out_toggle[layer-1]
 
     X = np.stack(act_layer["act"].to_numpy())   
     X_masked = X * mask
     act_layer["act"] = list(X_masked)
 
-    train_df, test_df = helpers.split_audio_files_stratified(   data=act_layer,
+    train_df, test_df = split_audio_files_stratified(   data=act_layer,
                                                                 test_size=0.1,
                                                                 group_by="speaker" )
 
-    best_C, C_auc_scores = helpers.talker_find_best_C(path="./zero_out_experiments/talker_log_reg", data=test_df, source=f"model_{layer:02d}", dont_run_again=False)
+    best_C, C_auc_scores = talker_find_best_C(path="./zero_out_experiments/talker_log_reg", data=test_df, source=f"model_{layer:02d}", dont_run_again=False)
 
-    preds, auc = helpers.talker_log_reg(act_layer, best_C, source=f"layer_{layer:02d}", path="./zero_out_experiments/talker_log_reg", dont_run_again=False)
+    preds, auc = talker_log_reg(act_layer, best_C, source=f"layer_{layer:02d}", path="./zero_out_experiments/talker_log_reg", dont_run_again=False)
 
     talker_auc_across_layers[f"{layer:02d}"] = auc
 
-    train_df, test_df = helpers.split_audio_files_by_filename(data=act_layer, test_size=0.1) # take 10% of the data to get best C; the naming of the var test_df really isn't great
+    train_df, test_df = split_audio_files_by_filename(data=act_layer, test_size=0.1) # take 10% of the data to get best C; the naming of the var test_df really isn't great
 
-    best_C, C_auc_scores = helpers.phone_find_best_C(path="./zero_out_experiments/phone_log_reg", data=test_df, source=f"model_{layer:02d}", dont_run_again=False)
+    best_C, C_auc_scores = phone_find_best_C(path="./zero_out_experiments/phone_log_reg", data=test_df, source=f"model_{layer:02d}", dont_run_again=False)
 
-    preds, auc = helpers.phone_log_reg(path="./zero_out_experiments/phone_log_reg", data=act_layer, best_C=best_C, source=f"layer_{layer:02d}", dont_run_again=False)
+    preds, auc = phone_log_reg(path="./zero_out_experiments/phone_log_reg", data=act_layer, best_C=best_C, source=f"layer_{layer:02d}", dont_run_again=False)
     
     phone_auc_across_layers[f"{layer:02d}"] = auc
 

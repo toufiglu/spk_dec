@@ -1,5 +1,4 @@
 
-import importlib
 import os
 import torch
 import pandas as pd
@@ -8,13 +7,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 import hoggorm as ho
 
-import helpers
+from acoustics import filter_out_irrelevant_rows
+from activations import read_activation_and_left_join_with_acoustics
+from decoding import decode_phone_COEF_from_one_layer, decode_talker_COEF_from_one_layer, phone_find_best_C, phone_log_reg, split_audio_files_by_filename
 from transformers import Wav2Vec2Model
 from sklearn.preprocessing import LabelEncoder,StandardScaler
 from sklearn.metrics.pairwise import cosine_similarity
 from plotnine import *
 
-importlib.reload(helpers)
 
 def get_talker_coef_across_layers(
     num_layers,
@@ -35,7 +35,7 @@ def get_talker_coef_across_layers(
     talker_coef_across_layers = {}
 
     for layer in range(1, num_layers):
-        layer_coef = helpers.decode_talker_COEF_from_one_layer(
+        layer_coef = decode_talker_COEF_from_one_layer(
             layer=layer,
             hid_act_folder=hid_act_folder,
             hid_pkl_folder=hid_pkl_folder,
@@ -72,7 +72,7 @@ def get_phone_coef_across_layers(
     phone_coef_across_layers = {}
 
     for layer in range(1, num_layers):
-        layer_coef = helpers.decode_phone_COEF_from_one_layer(
+        layer_coef = decode_phone_COEF_from_one_layer(
             layer=layer,
             hid_act_folder=hid_act_folder,
             hid_pkl_folder=hid_pkl_folder,
@@ -163,7 +163,7 @@ def rotate_hid_2spk_and_decode_phone_from_one_layer(layer,
     coef_mat = np.asarray(row["coef"].iloc[0])
     diff = coef_mat[1] - coef_mat[0]
 
-    act_layer = helpers.read_activation_and_left_join_with_acoustics(
+    act_layer = read_activation_and_left_join_with_acoustics(
         hid_act_folder=hid_act_folder,
         hid_pkl_folder=hid_pkl_folder,
         num_layers=num_layers-1,
@@ -192,13 +192,13 @@ def rotate_hid_2spk_and_decode_phone_from_one_layer(layer,
     
     act_layer_spk0 = act_layer_2spk[act_layer_2spk['class']==0]
 
-    act_layer_spk0 = helpers.filter_out_irrelevant_rows(act_layer_spk0)
+    act_layer_spk0 = filter_out_irrelevant_rows(act_layer_spk0)
 
-    train_df, test_df = helpers.split_audio_files_by_filename(data=act_layer_spk0, test_size=0.1)
+    train_df, test_df = split_audio_files_by_filename(data=act_layer_spk0, test_size=0.1)
 
-    best_C, C_auc_scores = helpers.phone_find_best_C(path=path, data=test_df, source=f"model_{layer:02d}", dont_run_again=dont_run_again)
+    best_C, C_auc_scores = phone_find_best_C(path=path, data=test_df, source=f"model_{layer:02d}", dont_run_again=dont_run_again)
 
-    preds, auc = helpers.phone_log_reg(path=path, data=act_layer_spk0, best_C=best_C, source=f"layer_{layer:02d}", dont_run_again=dont_run_again)
+    preds, auc = phone_log_reg(path=path, data=act_layer_spk0, best_C=best_C, source=f"layer_{layer:02d}", dont_run_again=dont_run_again)
 
     return {
          "layer": layer,

@@ -16,7 +16,7 @@ source("helpers.R")
 
 ```{r load-csv}
 layers <- 1:12
-spec_idx_path <- "../spec_idx"
+spec_idx_path <- "../results/results_spec_idx/spec_idx"
 
 layer_results <- lapply(layers, function(i) {
   path <- sprintf("%s/layer_%d_spec_idx.csv", spec_idx_path, i)
@@ -32,8 +32,9 @@ lapply(seq_along(layer_results), function(i) {
   df <- layer_results[[i]]
   mean_vowel_results <- get_summary_vowels(df)
   by_vowel <- by_vowel_plot(results=df, mean_vowel_results=mean_vowel_results)
+  dir.create("redo_spec_idx_by_vowels_plots", showWarnings = FALSE, recursive = TRUE)
   plot_name <- sprintf("redo_spec_idx_by_vowels_plots/by_vowel_layer_%d.png", i)
-  
+
   ggsave(filename = plot_name, plot = by_vowel, width = 6, height = 4, dpi = 300)
 })
 ```
@@ -43,8 +44,9 @@ lapply(seq_along(layer_results), function(i) {
   df <- layer_results[[i]]
   mean_speaker_results <- get_summary_speakers(df)
   by_speaker <- by_speaker_plot(results=df, mean_speaker_results=mean_speaker_results)
+  dir.create("redo_spec_idx_by_speakers_plots", showWarnings = FALSE, recursive = TRUE)
   plot_name <- sprintf("redo_spec_idx_by_speakers_plots/by_speaker_layer_%d.png", i)
-  
+
   ggsave(filename = plot_name, plot = by_speaker, width = 6, height = 4, dpi = 300)
 })
 ```
@@ -104,14 +106,18 @@ all_talkers_trajectory <- merged_results %>%
     
 ```
 
-```{r lmer}
+```{r lmer, eval=FALSE}
+# Requires kl_ratio_summary.csv, an intermediate produced by the exploratory
+# step src/exploratory/create_textgrid_write_interval_tier.py (written under a
+# git-ignored figures/ dir, so it is not shipped with the repo). Generate it
+# first, point the path below at it, then set eval=TRUE to run this model.
 data <- read_csv("../figures/distribution_plots/kl_ratio_summary.csv")
 m <- lm(r ~ vowel * layer + speaker, data=data)
 summary(m)
 ```
 ```{r visualize-RSA}
-marginals <- read_csv("../marginal_cors_across_layers.csv") %>% dplyr::select(-...1) %>% mutate(type="all-speakers")
-specs <- read_csv("../spec_cors_across_layers.csv") %>% dplyr::select(-...1) %>% mutate(type="speaker-specific")
+marginals <- read_csv("../results/marginal_cors_across_layers.csv") %>% dplyr::select(-...1) %>% mutate(type="all-speakers")
+specs <- read_csv("../results/spec_cors_across_layers.csv") %>% dplyr::select(-...1) %>% mutate(type="speaker-specific")
 
 results <- rbind(marginals, specs)
 

@@ -24,3 +24,5 @@ dependencies:
       - accelerate
       # sklearn via pip (avoid conda llvm-openmp)
       - scikit-learn
+      # RSA stage (compute_rsa.py)
+      - rsatoolbox

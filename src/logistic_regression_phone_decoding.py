@@ -11,7 +11,7 @@ from transformers import Wav2Vec2Model
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.decomposition import PCA
 from sklearn.pipeline import make_pipeline
-from readout_activation_leftjoin_annotation import read_activation_and_left_join_with_acoustics
+from activations import read_activation_and_left_join_with_acoustics
 from sklearn.model_selection import StratifiedGroupKFold, cross_val_score, cross_val_predict, GroupShuffleSplit, StratifiedKFold
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score

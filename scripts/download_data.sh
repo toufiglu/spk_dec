@@ -9,7 +9,7 @@
 # After downloading, LibriSpeech ships as .flac. The pipeline expects 16 kHz
 # .wav alongside Montreal Forced Aligner (MFA) TextGrids. To reproduce the
 # exact data/raw/dev-clean layout:
-#   1. Convert .flac -> .wav   (see experiments/adaptation/convert_flac_to_wav.sh)
+#   1. Convert .flac -> .wav   (bash scripts/convert_flac_to_wav.sh)
 #   2. Force-align with MFA     (produces the per-utterance .TextGrid files)
 # See README.md for details.
 

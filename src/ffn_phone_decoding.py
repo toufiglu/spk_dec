@@ -1,6 +1,4 @@
 import matplotlib.pyplot as plt
-import importlib
-import helpers
 import argparse
 import torch
 import torch.nn as nn
@@ -17,9 +15,6 @@ from pathlib import Path
 from torch.utils.data import DataLoader,TensorDataset
 from sklearn.model_selection import train_test_split, GroupShuffleSplit
 from sklearn.preprocessing import StandardScaler, LabelEncoder
-
-
-importlib.reload(helpers)
 
 
 def split_audio_files_by_filename(data, test_size):
@@ -196,7 +191,7 @@ def main():
     for pkl_path in sorted(folder.glob("*.pkl")):
         with open(pkl_path, "rb") as f:
             hid_act = pd.read_pickle(f)
-            train_df, test_df = helpers.split_audio_files_by_filename(data=hid_act, test_size=.1)
+            train_df, test_df = split_audio_files_by_filename(data=hid_act, test_size=.1)
             train_loader, test_loader = ffn_data_normalization_and_formatting(train_df=train_df, test_df=test_df)
             trainAcc,trainEvalAcc, testAcc,losses,net = function2trainTheModel(train_loader=train_loader, test_loader=test_loader)
             save_dir = os.path.join(model_ffn_dir, pkl_path + ".pth")

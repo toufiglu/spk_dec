@@ -1,6 +1,4 @@
 
-import importlib
-import helpers
 import argparse
 import os
 import torch
@@ -11,7 +9,7 @@ import matplotlib.pyplot as plt
 from transformers import Wav2Vec2Model
 from sklearn.preprocessing import LabelEncoder,StandardScaler
 
-importlib.reload(helpers)
+from decoding import decode_talker_from_one_layer
 
 def get_talker_auc_plot(results, plot_dir):
     df = results.copy()
@@ -79,6 +77,12 @@ def main():
         required=True,
         help="path to save AUC results as CSV.",
     )
+    parser.add_argument(
+        "--storage",
+        type=str,
+        default="./talker_decoding",
+        help="directory for per-layer best-C tables and prediction probabilities.",
+    )
 
     args = parser.parse_args()
 
@@ -89,12 +93,13 @@ def main():
 
     auc_across_layers = {}
     for layer in range(1, num_layers):
-        layer_auc = helpers.decode_talker_from_one_layer(
+        layer_auc = decode_talker_from_one_layer(
             layer=layer,
             hid_act_folder=args.hid_act_folder,
             hid_pkl_folder=args.hid_pkl_folder,
-            num_layers=num_layers - 1,  
+            num_layers=num_layers - 1,
             formant_df=formant_df,
+            path=args.storage,
             dont_run_again=not args.rerun,
             dont_read_again=not args.reread,
         )
@@ -112,86 +117,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-'''
-waveform_gammatone = pd.read_pickle("waveform_gammatone.pkl")
-gammatone_longform = helpers.gammatone_long(waveform_gammatone, formant_df=formant_df)
-gammatone_longform["phone"] = gammatone_longform["phone"].str.replace(r"\d+", "", regex=True)
-
-
-# decode from raw spectrogram
-# there is not much of a point doing multiprocessing here: it's quite fast; I changed the function here, so change the codes below
-if __name__ == "__main__":
-    
-    gammatone_longform = helpers.filter_out_irrelevant_rows(gammatone_longform) # remove irrelevant rows
-
-    best_C_acou, C_auc_scores_acou = helpers.talker_find_best_C(data=gammatone_longform, source="gt", dont_run_again=True) 
-
-    preds_acou, auc_acou = helpers.talker_log_reg(data=gammatone_longform, best_C=best_C_acou, source="gt", dont_run_again=True) 
-    
-# get bayes factor
-le = LabelEncoder()
-y_enc = le.fit_transform(gammatone_longform["speaker"])
-speaker_map = dict(zip(le.classes_, le.transform(le.classes_)))
-
-speaker_map = {k:int(v) for k, v in speaker_map.items()}
-
-gammatone_longform["speaker_idx"] = gammatone_longform["speaker"].map(speaker_map)
-
-gammatone_longform["speaker_prob"] = preds_acou[
-    np.arange(len(preds_acou)), 
-    gammatone_longform["speaker_idx"].values
-]
-
-eps = 1e-12 # some row returned 0 probability, log prob will blow up to -inf
-gammatone_logprob = np.log(gammatone_longform["speaker_prob"].clip(lower=eps)).sum()
-
-gammatone_logprob = np.log(gammatone_longform["speaker_prob"]).sum()
-
-ratio_dict = {}
-
-for layer in range(1, 13):
-
-    # load layer probabilities
-    file = f"./log_reg/layer_{layer:02d}_pred_prob.h5"
-    with h5py.File(file, "r") as f:
-        preds_layer = f["predictions"][:]   # (N, speakers)
-
-    # load layer dataframe
-    layer_df = pd.read_pickle(f"./context_size/single_vowels/w2v_hid_act_formant_pkl/hidden_acts_{layer}.pkl")
-
-    # map speaker to index
-    layer_df["speaker_idx"] = layer_df["speaker"].map(speaker_map)
-
-    layer_df = helpers.filter_out_irrelevant_rows(layer_df) 
-
-    # extract probability of true speaker
-    layer_df["speaker_prob"] = preds_layer[
-        np.arange(len(preds_layer)),
-        layer_df["speaker_idx"].values
-    ]
-
-    # compute log-prob
-    model_logprob = np.log(layer_df["speaker_prob"]).sum()
-
-    # ratio in log-space
-    ratio = model_logprob - gammatone_logprob
-
-    ratio_dict[layer] = ratio
-    print(f"Layer {layer}: ratio = {ratio}")
-
-ratio_df = pd.DataFrame({
-    "layer": list(ratio_dict.keys()),
-    "log_prob_ratio": list(ratio_dict.values())
-})
-
-# Plot
-plt.figure()
-plt.plot(ratio_df["layer"], ratio_df["log_prob_ratio"], marker="o")
-plt.xlabel("Layer")
-plt.ylabel("log Bayes factor")
-plt.title("Bayes factor across layers")
-plt.grid(True)
-plt.show()
-'''
-
