@@ -1,19 +1,19 @@
 # Talker Decoding
 
-Probing how self-supervised speech models (wav2vec 2.0, WavLM, HuBERT, Whisper)
-represent **talker identity** vs. **phonetic content** across their layers. The
+Probing how self-supervised speech models (wav2vec 2.0 only in the current repo)
+represent **talker** vs. **phone** information across their layers. The
 pipeline extracts per-layer hidden states for LibriSpeech vowels, aligns them
-with phone- and formant-level acoustic annotations, and quantifies talker vs.
-phone structure three ways: **linear / FFN decoding**, a **speaker-specificity
+with phone- and formant-level phonetic annotations, and quantifies talker vs.
+phone information three ways: **logistic regression / feedforward network** decoding for phones and talkers, a **speaker-specificity
 KLD index**, and **RSA** against acoustic RDMs.
 
 ![Speaker-specificity index across wav2vec 2.0 layers](docs/talker_specificity_across_layers.png)
 
 *Speaker-specificity index (a KL-divergence ratio: 1 = a layer tracks each
-talker's **own** vowel acoustics, 0.5 = only talker-independent phonetic
+talker's **specific** vowel acoustics, 0.5 = only **population-general** phonetic
 category) sits above 0.5 at every wav2vec 2.0 layer — talker-specific detail is
-preserved throughout the network, dipping slightly mid-stack and rising again
-at the top. Thin grey lines are individual vowels. Regenerate with
+preserved throughout the network, decreasing slightly in the middle layers and rising again
+in the last layers. Thin grey lines are for individual vowels. Regenerate with
 `python docs/make_figure.py`.*
 
 ## Repository layout
@@ -28,30 +28,29 @@ talker-decoding/
 │   └── talker_specificity_across_layers.png
 ├── scripts/
 │   ├── download_data.sh    Fetch LibriSpeech dev-clean from OpenSLR
-│   └── convert_flac_to_wav.sh  Recursively convert the corpus to 16 kHz .wav
-├── src/                    Reproducible pipeline (run from inside this directory)
-│   ├── run_pipeline.py     ★ Single entry point that chains the stages below
-│   ├── get_waveform.py · extract_embeddings.py · readout_activation_leftjoin_annotation.py
+│   └── convert_flac_to_wav.sh  Recursively convert the corpus to 16 kHz .wav for embedding extraction
+├── src/                    
+│   ├── run_pipeline.py     ★ pipeline file
+│   ├── get_waveform.py · extract_embeddings.py · readout_activation_leftjoin_annotation.py Extract embedding, left join to get time columns (every 20 ms) 
 │   ├── {logistic_regression,ffn}_{talker,phone}_decoding.py   Per-layer decoders
-│   ├── compute_spec_idx.py Speaker-specificity index (KLD ratio) by layer
-│   ├── compute_rsa.py      RSA of model layers vs. acoustic RDMs
-│   ├── get_phone_tier.py · create_textgrid_write_interval_tier.py   Annotation prep
-│   ├── acoustics.py · activations.py · decoding.py · spec_idx.py    Shared libraries
-│   └── exploratory/        Analysis / scratch scripts (hard-coded paths; see its README)
-├── R/                      R analysis (KLD visualization + mixed-effects models)
-├── results/                Small tracked result tables (CSV)
+│   ├── compute_spec_idx.py get speaker-specificity index (KLD ratio) for each layer
+│   ├── compute_rsa.py      RSA of model vs. acoustic RDMs
+│   ├── get_phone_tier.py · create_textgrid_write_interval_tier.py   annotation for audio files (phone, time, talker, audio files)
+│   ├── acoustics.py · activations.py · decoding.py · spec_idx.py    helper functions
+│   └── exploratory/        Analysis / scratch scripts (see its README)
+├── R/                      R analysis (further KLD visualization + mixed-effects models)
+├── results/                csv files for KLD results
 └── data/                   Git-ignored; created by download_data.sh + the pipeline
     ├── raw/                LibriSpeech dev-clean (.wav + MFA TextGrids)
     └── processed/          Hidden states, decoders, intermediate tables
 ```
 
-Large, regenerable artifacts are intentionally **not** stored in this repo: the
-raw corpus is downloaded, and all hidden states, embeddings, decoder
-coefficients, and figures are produced by running the code.
+Regenerable artifacts are not stored: the raw corpus can be downloaded, and all hidden states, embeddings, decoder
+coefficients, and figures can be reproduced by running the code.
 
 ## Setup
 
-Conda (recommended — pins the torch/OpenMP stack):
+Conda:
 
 ```bash
 conda env create -f environment.yml
@@ -73,7 +72,7 @@ The project uses **LibriSpeech dev-clean** (https://www.openslr.org/12/).
 bash scripts/download_data.sh
 ```
 
-LibriSpeech ships as `.flac`. The pipeline expects 16 kHz `.wav` plus Montreal
+LibriSpeech audio files are in `.flac` format. The models and this pipeline expect 16 kHz `.wav` plus Montreal
 Forced Aligner (MFA) `.TextGrid` files per utterance. To reproduce the
 `data/raw/dev-clean/<speaker>/<chapter>/*.wav + *.TextGrid` layout:
 
@@ -88,13 +87,11 @@ Forced Aligner (MFA) `.TextGrid` files per utterance. To reproduce the
 
 ## Running the pipeline
 
-> **Convention:** `src/` scripts import their sibling modules directly
+> **Convention:** `src/` scripts import their modules directly
 > (`from acoustics import ...`, `from decoding import ...`) and write
 > intermediate files relative to the working directory, so run them from
 > **inside `src/`** (`cd src`). Outputs land under `data/processed/`. Shared
 > code lives in `acoustics.py`, `activations.py`, `decoding.py`, `spec_idx.py`.
-
-### One command, start to finish
 
 `src/run_pipeline.py` chains **seven stages** —
 `waveform → embeddings → readout → decode → spec_idx → figure → rsa` — skipping
@@ -102,20 +99,14 @@ any stage whose output already exists:
 
 ```bash
 cd src
-# Preview the exact commands without running anything:
 python run_pipeline.py \
     --audio-root ../data/raw/dev-clean \
     --annotation ../data/processed/formant.pkl \
     --dry-run
-
-# Real run (writes under ../data/processed/):
-python run_pipeline.py \
-    --audio-root ../data/raw/dev-clean \
-    --annotation ../data/processed/formant.pkl
 ```
 
 Useful flags: `--stages decode,spec_idx,rsa` to run a subset; `--decoder ffn` to
-decode the talker with a feed-forward net instead of logistic regression
+decode the talker with a feed-forward network instead of logistic regression
 (default `logreg`; outputs are named `talker_auc_<decoder>.{csv,png}` so the two
 never collide); `--force` to rerun completed stages; `--model` to swap in
 another HF model; `--help` for everything.
@@ -158,10 +149,10 @@ python ../docs/make_figure.py   # defaults to the tracked results/ tables
 ## Further analysis
 
 - **R** — `R/visualize_kld.Rmd` (with `R/helpers.R`) produces the per-vowel /
-  per-speaker KLD plots and the mixed-effects models (`lmerTest`) over the
-  exported result tables.
+  per-speaker KLD plots and the mixed-effects statistical models over the
+ result tables.
 - **Exploratory** — `src/exploratory/` holds the representational-rotation,
-  cosine-geometry, gammatone-baseline, and stimulus-selection scripts. They
+  cosine-geometry, gammatone spectrogram baseline, and other stimulus-selection scripts (pending further exploration for this project). They
   encode real method detail but run top-level code with hard-coded paths; see
   `src/exploratory/README.md`.
 
